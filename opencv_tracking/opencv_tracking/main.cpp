@@ -18,13 +18,22 @@
 
 void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 {
+    cv::Rect* pTrack_window = (cv::Rect*)userdata;
+    
      if  ( event == cv::EVENT_LBUTTONDOWN )
      {
-          std::cout << "Left button of the mouse is clicked - position (" << x << ", " << y << ")" << std::endl;
+        std::cout << "Left button of the mouse is clicked - position (" << x << ", " << y << ")" << std::endl;
+        pTrack_window->x = x;
+        pTrack_window->y = y;
      }
     if  ( event == cv::EVENT_LBUTTONUP )
     {
-         std::cout << "Left button of the mouse is released - position (" << x << ", " << y << ")" << std::endl;
+        std::cout << "Left button of the mouse is released - position (" << x << ", " << y << ")" << std::endl;
+        pTrack_window->width = std::max(std::abs(x - pTrack_window->x), 5);
+        pTrack_window->height = std::max(std::abs(y - pTrack_window->y), 5);
+        pTrack_window->x = std::min(x, pTrack_window->x);
+        pTrack_window->y = std::min(y, pTrack_window->y);
+        
     }
     /*
      else if  ( event == cv::EVENT_RBUTTONDOWN )
@@ -83,6 +92,42 @@ using namespace cv;
 using namespace std;
 int main(int argc, char **argv)
 {
+    cv::Mat img = cv::imread("/Users/chen/github/opencv/tracking/opencv_tracking/bus.png");
+    cv::imshow("Input Image", img);
+    
+    cv::Mat hsv_img, frame, roi, hsv_roi, mask, hsv_inRange;
+    cvtColor(img, hsv_img, COLOR_BGR2HSV);
+    cv::imshow("HSV Image", hsv_img);
+    
+    cv::Rect track_window(0, 0, 0, 0);
+    
+    //set the callback function for any mouse event
+    cv::setMouseCallback("Input Image", CallBackFunc, &track_window);
+    
+    
+    while(true){
+        
+        //if (track_window.width != 0)
+        //    std::cout <<track_window.x<<","<<track_window.y<<","<<track_window.width<<","<<track_window.height<<std::endl;
+        
+        cv::Vec3b hsvPixel(hsv_img.at<Vec3b>(track_window.y + 0.5*track_window.height, track_window.x + 0.5*track_window.width)); // it seems x and y need to be swapped.
+        int thresh = 40;
+
+        cv::Scalar minHSV = cv::Scalar(hsvPixel.val[0] - thresh, hsvPixel.val[1] - thresh, hsvPixel.val[2] - thresh);
+        cv::Scalar maxHSV = cv::Scalar(hsvPixel.val[0] + thresh, hsvPixel.val[1] + thresh, hsvPixel.val[2] + thresh);
+        
+        cv::inRange(hsv_img, minHSV, maxHSV, hsv_inRange);
+        cv::imshow("HSV_inRange", hsv_inRange);
+        //cv::bitwise_and(brightHSV, brightHSV, resultHSV, maskHSV);
+
+        
+        int keyboard = waitKey(300);
+        if (keyboard == 'q' || keyboard == 27)
+            break;
+    }
+
+    
+    /*
     const string about =
         "This sample demonstrates the camshift algorithm.\n"
         "The example file can be downloaded from:\n"
@@ -151,4 +196,5 @@ int main(int argc, char **argv)
         if (keyboard == 'q' || keyboard == 27)
             break;
     }
+     */
 }
