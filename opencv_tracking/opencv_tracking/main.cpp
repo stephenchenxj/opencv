@@ -92,39 +92,130 @@ using namespace cv;
 using namespace std;
 int main(int argc, char **argv)
 {
-    cv::Mat img = cv::imread("/Users/chen/github/opencv/tracking/opencv_tracking/bus.png");
+    //cv::Mat img = cv::imread("/Users/chen/github/opencv/tracking/opencv_tracking/bus.png");
+    
+    string filename = "/Users/chen/github/opencv/tracking/opencv_tracking/slow_traffic_small.mp4";
+    cv::VideoCapture capture(filename);
+    cv::Mat img;
+    capture >> img;
+    
     cv::imshow("Input Image", img);
     
-    cv::Mat hsv_img, frame, roi, hsv_roi, mask, hsv_inRange;
-    cvtColor(img, hsv_img, COLOR_BGR2HSV);
-    cv::imshow("HSV Image", hsv_img);
     
-    cv::Rect track_window(0, 0, 0, 0);
+    if (!capture.isOpened()){
+        //error in opening the video input
+        cerr << "Unable to open file!" << endl;
+        return 0;
+    }
+    
+    
+    
+    
+    //cv::Mat frame, roi, hsv_roi, mask;
+    cv::Mat hsv_img, frame, roi, hsv_roi, mask, hsv_inRange;
+    cv::Mat hsv, dst;
+    cvtColor(img, hsv, COLOR_BGR2HSV);
+    //cv::imshow("HSV Image", hsv);
+    
+    cv::Rect track_window(300, 200, 100, 50);
+    cv::Rect init_track(0, 0, 0, 0);
     
     //set the callback function for any mouse event
-    cv::setMouseCallback("Input Image", CallBackFunc, &track_window);
+    cv::setMouseCallback("Input Image", CallBackFunc, &init_track);
+    
+    
+    //roi = frame(track_window);
+    roi = img(track_window);
+    cv::cvtColor(roi, hsv_roi, COLOR_BGR2HSV);
+    inRange(hsv_roi, Scalar(0, 60, 32), Scalar(180, 255, 255), mask);
+    imshow("hsv_roi", hsv_roi);
+    imshow("mask", mask);
+    
+    
+    float range_[] = {0, 180};
+    const float* range[] = {range_};
+    Mat roi_hist;
+    int histSize[] = {180};
+    int channels[] = {0};
+    calcHist(&hsv_roi, 1, channels, mask, roi_hist, 1, histSize, range);
+    normalize(roi_hist, roi_hist, 0, 255, NORM_MINMAX);
+    // Setup the termination criteria, either 10 iteration or move by atleast 1 pt
+    TermCriteria term_crit(TermCriteria::EPS | TermCriteria::COUNT, 10, 1);
+    
+    Point2f points[4];
+    cv::Scalar minHSV;
+    cv::Scalar maxHSV;
     
     
     while(true){
         
+        capture >> img;
+        
         //if (track_window.width != 0)
         //    std::cout <<track_window.x<<","<<track_window.y<<","<<track_window.width<<","<<track_window.height<<std::endl;
         
-        cv::Vec3b hsvPixel(hsv_img.at<Vec3b>(track_window.y + 0.5*track_window.height, track_window.x + 0.5*track_window.width)); // it seems x and y need to be swapped.
-        int thresh = 40;
-
-        cv::Scalar minHSV = cv::Scalar(hsvPixel.val[0] - thresh, hsvPixel.val[1] - thresh, hsvPixel.val[2] - thresh);
-        cv::Scalar maxHSV = cv::Scalar(hsvPixel.val[0] + thresh, hsvPixel.val[1] + thresh, hsvPixel.val[2] + thresh);
+        if(init_track.width != 0) {
+            track_window = init_track;
+            init_track = {0,0,0,0};
+            roi = img(track_window);
+            cv::cvtColor(roi, hsv_roi, COLOR_BGR2HSV);
+            
+            int thresh = 40;
+            cv::Vec3b hsvPixel(hsv.at<Vec3b>(track_window.y + 0.5*track_window.height, track_window.x + 0.5*track_window.width)); // it seems x and y need to be swapped.
+            minHSV = cv::Scalar(hsvPixel.val[0] - thresh, hsvPixel.val[1] - thresh, hsvPixel.val[2] - thresh);
+            maxHSV = cv::Scalar(hsvPixel.val[0] + thresh, hsvPixel.val[1] + thresh, hsvPixel.val[2] + thresh);
+            std::cout<< minHSV[0];
+            
+        }
         
-        cv::inRange(hsv_img, minHSV, maxHSV, hsv_inRange);
-        cv::imshow("HSV_inRange", hsv_inRange);
+        if(track_window.width != 0){
+            
+            roi = img(track_window);
+            cv::cvtColor(roi, hsv_roi, COLOR_BGR2HSV);
+            //inRange(hsv_roi, Scalar(0, 60, 32), Scalar(180, 255, 255), mask);
+            inRange(hsv_roi, minHSV, maxHSV, mask);
+            //imshow("hsv_roi", hsv_roi);
+            //imshow("mask", mask);
+            
+            
+            calcHist(&hsv_roi, 1, channels, mask, roi_hist, 1, histSize, range);
+            normalize(roi_hist, roi_hist, 0, 255, NORM_MINMAX);
+            // Setup the termination criteria, either 10 iteration or move by atleast 1 pt
+            TermCriteria term_crit(TermCriteria::EPS | TermCriteria::COUNT, 10, 1);
+            
+            
+            cv::cvtColor(img, hsv, COLOR_BGR2HSV);
+            cv::calcBackProject(&hsv, 1, channels, roi_hist, dst, range);
+            //imshow("dst", dst);
+            // apply camshift to get the new location
+            //cv::RotatedRect rot_rect = cv::CamShift(dst, track_window, term_crit);
+            // Draw it on image
+            //rot_rect.points(points);
+            //for (int i = 0; i < 4; i++)
+            //    line(img, points[i], points[(i+1)%4], 255, 2);
+            
+            
+            cv::meanShift(dst, track_window, term_crit);
+            cv::rectangle(img, track_window, 255, 2);
+            
+            imshow("Input Image", img);
+        
+            
+            
+            
+            cv::inRange(hsv, minHSV, maxHSV, hsv_inRange);
+            cv::imshow("HSV_inRange", hsv_inRange);
         //cv::bitwise_and(brightHSV, brightHSV, resultHSV, maskHSV);
+        }
 
         
-        int keyboard = waitKey(300);
+        int keyboard = waitKey(30);
         if (keyboard == 'q' || keyboard == 27)
             break;
     }
+    
+    cv::destroyAllWindows();
+    capture.release();
 
     
     /*
